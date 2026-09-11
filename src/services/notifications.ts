@@ -4,18 +4,42 @@ import { NotificationSettings, TodoItem } from '../types/todo';
 import { getTodayString } from './storage';
 
 // Configure how notifications should be handled when the app is in foreground
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+try {
+  Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+      shouldShowAlert: true,
+      shouldShowBanner: true,
+      shouldShowList: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
+    }),
+  });
+} catch (err) {
+  console.warn('Could not set notification handler:', err);
+}
 
 /**
- * Check existing notification permissions
+ * Setup Android Notification Channel (Required on Android 8.0+)
+ */
+export const setupNotificationChannel = async () => {
+  if (Platform.OS === 'android') {
+    try {
+      await Notifications.setNotificationChannelAsync('default', {
+        name: 'Gừng Todo Nhắc việc',
+        importance: Notifications.AndroidImportance.MAX,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#EA580C',
+        enableVibrate: true,
+        showBadge: true,
+      });
+    } catch (error) {
+      console.warn('Could not setup Android notification channel:', error);
+    }
+  }
+};
+
+/**
+ * Check existing notification permissions safely
  */
 export const checkNotificationPermission = async (): Promise<boolean> => {
   if (Platform.OS === 'web') return false;
@@ -24,18 +48,20 @@ export const checkNotificationPermission = async (): Promise<boolean> => {
     const { status } = await Notifications.getPermissionsAsync();
     return status === 'granted';
   } catch (error) {
-    console.error('Error checking notification permissions:', error);
+    console.warn('Error checking notification permissions:', error);
     return false;
   }
 };
 
 /**
- * Request notification permissions from iOS
+ * Request notification permissions safely for both iOS and Android
  */
 export const requestNotificationPermission = async (): Promise<boolean> => {
   if (Platform.OS === 'web') return false;
 
   try {
+    await setupNotificationChannel();
+
     const { status: existingStatus } = await Notifications.getPermissionsAsync();
     let finalStatus = existingStatus;
 
@@ -46,20 +72,21 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
           allowBadge: true,
           allowSound: true,
         },
+        android: {},
       });
       finalStatus = status;
     }
 
     return finalStatus === 'granted';
   } catch (error) {
-    console.error('Error requesting notification permissions:', error);
+    console.warn('Error requesting notification permissions:', error);
     return false;
   }
 };
 
 /**
  * Schedule recurring daily offline notifications for morning and evening.
- * Runs 100% offline using iOS UNUserNotificationCenter.
+ * Runs 100% offline and safe against unhandled exceptions on any platform.
  */
 export const scheduleDailyNotifications = async (
   todos: TodoItem[],
@@ -68,11 +95,17 @@ export const scheduleDailyNotifications = async (
   if (Platform.OS === 'web') return false;
 
   try {
+    await setupNotificationChannel();
+
     const hasPermission = await checkNotificationPermission();
     if (!hasPermission) return false;
 
     // Cancel previously scheduled local notifications to avoid duplicates
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    try {
+      await Notifications.cancelAllScheduledNotificationsAsync();
+    } catch (cancelErr) {
+      console.warn('Error canceling scheduled notifications:', cancelErr);
+    }
 
     const today = getTodayString();
     const todayTodos = todos.filter(t => t.date === today);
@@ -93,6 +126,7 @@ export const scheduleDailyNotifications = async (
           sound: settings.soundEnabled,
           badge: pendingCount,
           data: { type: 'morning_check', date: today },
+          ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -116,6 +150,7 @@ export const scheduleDailyNotifications = async (
           sound: settings.soundEnabled,
           badge: pendingCount,
           data: { type: 'evening_check', date: today },
+          ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DAILY,
@@ -127,19 +162,21 @@ export const scheduleDailyNotifications = async (
 
     return true;
   } catch (error) {
-    console.error('Error scheduling daily notifications:', error);
+    console.warn('Error scheduling daily notifications:', error);
     return false;
   }
 };
 
 /**
  * Triggers a test notification 3 seconds in the future
- * so the user can immediately verify push notifications on iPhone 13 mini!
+ * so the user can immediately verify push notifications on both iOS and Android!
  */
 export const triggerTestNotification = async (): Promise<boolean> => {
   if (Platform.OS === 'web') return false;
 
   try {
+    await setupNotificationChannel();
+
     const hasPermission = await checkNotificationPermission();
     if (!hasPermission) {
       const granted = await requestNotificationPermission();
@@ -149,8 +186,9 @@ export const triggerTestNotification = async (): Promise<boolean> => {
     await Notifications.scheduleNotificationAsync({
       content: {
         title: '🐾 Mèo Gừng thử nghiệm thông báo!',
-        body: 'Thông báo đẩy offline hoạt động hoàn hảo và siêu mượt trên iPhone của bạn! 🐱✨',
+        body: 'Thông báo đẩy offline hoạt động hoàn hảo và siêu mượt trên điện thoại của bạn! 🐱✨',
         sound: true,
+        ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
       },
       trigger: {
         type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL,
@@ -160,7 +198,7 @@ export const triggerTestNotification = async (): Promise<boolean> => {
 
     return true;
   } catch (error) {
-    console.error('Error triggering test notification:', error);
+    console.warn('Error triggering test notification:', error);
     return false;
   }
 };

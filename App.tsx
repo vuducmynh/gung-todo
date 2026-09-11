@@ -34,6 +34,7 @@ import {
   scheduleDailyNotifications,
   checkNotificationPermission,
   requestNotificationPermission,
+  setupNotificationChannel,
 } from './src/services/notifications';
 import { checkForGitHubUpdate } from './src/services/updater';
 import { triggerHaptic } from './src/utils/haptics';
@@ -48,7 +49,7 @@ import { SettingsModal } from './src/components/SettingsModal';
 import { UpdateModal } from './src/components/UpdateModal';
 import { PermissionModal } from './src/components/PermissionModal';
 
-export default function App() {
+function MainScreen() {
   const [todos, setTodos] = useState<TodoItemType[]>([]);
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
   const [selectedDate, setSelectedDate] = useState<string>(getTodayString());
@@ -65,44 +66,68 @@ export default function App() {
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
 
-  // 1. Initialize data on startup
+  // 1. Initialize data safely on startup
   useEffect(() => {
+    let isMounted = true;
+
     const initialize = async () => {
-      // Load saved settings
-      const savedSettings = await loadSettings();
-      setSettings(savedSettings);
-
-      // Load saved todos
-      const loaded = await loadTodos();
-
-      // Perform daily rollover if new day
-      const rolloverResult = await checkAndPerformRollover(loaded);
-      const currentTodos = rolloverResult.todos;
-      setTodos(currentTodos);
-
-      // Schedule offline notifications
-      await scheduleDailyNotifications(currentTodos, savedSettings);
-
-      // Check notification permissions
-      const hasPermission = await checkNotificationPermission();
-      if (!hasPermission && !savedSettings.permissionAsked) {
-        // Show gentle permission priming prompt
-        setTimeout(() => setIsPermissionModalOpen(true), 1200);
-      }
-
-      // Check GitHub update in background
       try {
-        const update = await checkForGitHubUpdate(APP_CONFIG.version);
-        if (update && update.hasUpdate) {
-          setReleaseInfo(update);
-          setIsUpdateModalOpen(true);
+        // Setup Android channel first
+        if (Platform.OS === 'android') {
+          await setupNotificationChannel();
         }
-      } catch {
-        // Ignore network errors in offline mode
+
+        // Load saved settings
+        const savedSettings = await loadSettings();
+        if (isMounted) setSettings(savedSettings);
+
+        // Load saved todos
+        const loaded = await loadTodos();
+
+        // Perform daily rollover if new day
+        const rolloverResult = await checkAndPerformRollover(loaded);
+        const currentTodos = rolloverResult.todos;
+        if (isMounted) setTodos(currentTodos);
+
+        // Schedule offline notifications safely
+        try {
+          await scheduleDailyNotifications(currentTodos, savedSettings);
+        } catch (notifErr) {
+          console.warn('Notifications init warning:', notifErr);
+        }
+
+        // Check notification permissions
+        try {
+          const hasPermission = await checkNotificationPermission();
+          if (!hasPermission && !savedSettings.permissionAsked && isMounted) {
+            setTimeout(() => {
+              if (isMounted) setIsPermissionModalOpen(true);
+            }, 1200);
+          }
+        } catch (permErr) {
+          console.warn('Permission check warning:', permErr);
+        }
+
+        // Check GitHub update in background
+        try {
+          const update = await checkForGitHubUpdate(APP_CONFIG.version);
+          if (update && update.hasUpdate && isMounted) {
+            setReleaseInfo(update);
+            setIsUpdateModalOpen(true);
+          }
+        } catch {
+          // Ignore network errors in offline mode
+        }
+      } catch (globalErr) {
+        console.warn('App initialization warning:', globalErr);
       }
     };
 
     initialize();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   // Update notifications when todos change
@@ -110,7 +135,11 @@ export default function App() {
     async (newTodos: TodoItemType[]) => {
       setTodos(newTodos);
       await saveTodos(newTodos);
-      await scheduleDailyNotifications(newTodos, settings);
+      try {
+        await scheduleDailyNotifications(newTodos, settings);
+      } catch (err) {
+        console.warn('Error rescheduling notifications:', err);
+      }
     },
     [settings]
   );
@@ -153,7 +182,7 @@ export default function App() {
       );
     }
 
-    // Sort: Uncompleted first, Starred at the top, newest first
+    // Sort: Incomplete first, Starred at the top, newest first
     return [...result].sort((a, b) => {
       if (a.completed !== b.completed) {
         return a.completed ? 1 : -1;
@@ -284,185 +313,191 @@ export default function App() {
   };
 
   return (
-    <SafeAreaProvider>
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <StatusBar style="dark" />
+    <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
+      <StatusBar style="dark" />
 
-        {/* 1. APP HEADER */}
-        <View style={styles.header}>
-          <View style={styles.brandRow}>
-            <View style={styles.catAvatar}>
-              <CatMascot mood={mascotMood} size={38} />
-            </View>
-            <View>
-              <View style={styles.titleContainer}>
-                <Text style={styles.brandTitle}>Gừng Todo</Text>
-                <View style={styles.versionPill}>
-                  <Text style={styles.versionPillText}>v{APP_CONFIG.version}</Text>
-                </View>
-              </View>
-              <Text style={styles.brandSubtitle}>Mèo cam nhắc việc đúng giờ 🐾</Text>
-            </View>
+      {/* 1. APP HEADER */}
+      <View style={styles.header}>
+        <View style={styles.brandRow}>
+          <View style={styles.catAvatar}>
+            <CatMascot mood={mascotMood} size={38} />
           </View>
-
-          <View style={styles.headerActions}>
-            <TouchableOpacity
-              onPress={() => {
-                triggerHaptic('selection', settings.hapticsEnabled);
-                setIsSearching(!isSearching);
-                if (isSearching) setSearchQuery('');
-              }}
-              style={styles.headerIconBtn}
-              activeOpacity={0.7}
-            >
-              {isSearching ? (
-                <X size={19} color={COLORS.textSecondary} />
-              ) : (
-                <Search size={19} color={COLORS.textSecondary} />
-              )}
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={() => {
-                triggerHaptic('selection', settings.hapticsEnabled);
-                setIsSettingsOpen(true);
-              }}
-              style={styles.headerIconBtn}
-              activeOpacity={0.7}
-            >
-              <Settings size={19} color={COLORS.textSecondary} />
-            </TouchableOpacity>
+          <View>
+            <View style={styles.titleContainer}>
+              <Text style={styles.brandTitle}>Gừng Todo</Text>
+              <View style={styles.versionPill}>
+                <Text style={styles.versionPillText}>v{APP_CONFIG.version}</Text>
+              </View>
+            </View>
+            <Text style={styles.brandSubtitle}>Mèo cam nhắc việc đúng giờ 🐾</Text>
           </View>
         </View>
 
-        {/* Search Bar (Collapsible) */}
-        {isSearching && (
-          <View style={styles.searchBarContainer}>
-            <Search size={16} color={COLORS.textMuted} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Tìm kiếm công việc, ghi chú..."
-              placeholderTextColor={COLORS.textMuted}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoFocus
-            />
-            {searchQuery.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <X size={16} color={COLORS.textMuted} />
-              </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection', settings.hapticsEnabled);
+              setIsSearching(!isSearching);
+              if (isSearching) setSearchQuery('');
+            }}
+            style={styles.headerIconBtn}
+            activeOpacity={0.7}
+          >
+            {isSearching ? (
+              <X size={19} color={COLORS.textSecondary} />
+            ) : (
+              <Search size={19} color={COLORS.textSecondary} />
             )}
-          </View>
-        )}
+          </TouchableOpacity>
 
-        {/* 2. DAY SELECTOR & CALENDAR STRIP */}
-        <DaySelector
-          currentDate={selectedDate}
-          onDateChange={setSelectedDate}
-          hapticsEnabled={settings.hapticsEnabled}
-        />
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection', settings.hapticsEnabled);
+              setIsSettingsOpen(true);
+            }}
+            style={styles.headerIconBtn}
+            activeOpacity={0.7}
+          >
+            <Settings size={19} color={COLORS.textSecondary} />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        {/* 3. PROGRESS & CAT SUMMARY CARD */}
-        <ProgressBar completedCount={completedCount} totalCount={totalCount} />
-
-        {/* 4. CATEGORY FILTER PILLS */}
-        <CategoryFilter
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          categoryCounts={categoryCounts}
-          hapticsEnabled={settings.hapticsEnabled}
-        />
-
-        {/* 5. TODO LIST */}
-        <FlatList
-          data={displayedTodos}
-          keyExtractor={item => item.id}
-          renderItem={({ item }) => (
-            <TodoItem
-              item={item}
-              onToggleComplete={handleToggleComplete}
-              onToggleStar={handleToggleStar}
-              onEdit={itemToEdit => {
-                setEditingItem(itemToEdit);
-                setIsAddModalOpen(true);
-              }}
-              onDelete={handleDeleteTodo}
-              hapticsEnabled={settings.hapticsEnabled}
-            />
+      {/* Search Bar (Collapsible) */}
+      {isSearching && (
+        <View style={styles.searchBarContainer}>
+          <Search size={16} color={COLORS.textMuted} />
+          <TextInput
+            style={styles.searchInput}
+            placeholder="Tìm kiếm công việc, ghi chú..."
+            placeholderTextColor={COLORS.textMuted}
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            autoFocus
+          />
+          {searchQuery.length > 0 && (
+            <TouchableOpacity onPress={() => setSearchQuery('')}>
+              <X size={16} color={COLORS.textMuted} />
+            </TouchableOpacity>
           )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <CatMascot mood="sleeping" size={100} />
-              <Text style={styles.emptyTitle}>
-                {searchQuery ? 'Không tìm thấy việc phù hợp' : 'Chưa có việc nào cho ngày này'}
-              </Text>
-              <Text style={styles.emptySubtitle}>
-                {searchQuery
-                  ? 'Hãy thử tìm bằng từ khóa khác nhé!'
-                  : 'Mèo Gừng đang ngủ nướng. Nhấn nút + bên dưới để lên kế hoạch ngay! 🐾'}
-              </Text>
-            </View>
-          }
-        />
+        </View>
+      )}
 
-        {/* 6. FLOATING ACTION BUTTON (+) */}
-        <TouchableOpacity
-          onPress={() => {
-            triggerHaptic('medium', settings.hapticsEnabled);
-            setEditingItem(null);
-            setIsAddModalOpen(true);
-          }}
-          style={styles.fab}
-          activeOpacity={0.85}
-        >
-          <Plus size={28} color="#FFFFFF" strokeWidth={2.6} />
-        </TouchableOpacity>
+      {/* 2. DAY SELECTOR & CALENDAR STRIP */}
+      <DaySelector
+        currentDate={selectedDate}
+        onDateChange={setSelectedDate}
+        hapticsEnabled={settings.hapticsEnabled}
+      />
 
-        {/* MODALS */}
-        <AddTodoModal
-          visible={isAddModalOpen}
-          onClose={() => {
-            setIsAddModalOpen(false);
-            setEditingItem(null);
-          }}
-          onSave={handleSaveTodo}
-          editingItem={editingItem}
-          targetDate={selectedDate}
-          hapticsEnabled={settings.hapticsEnabled}
-        />
+      {/* 3. PROGRESS & CAT SUMMARY CARD */}
+      <ProgressBar completedCount={completedCount} totalCount={totalCount} />
 
-        <SettingsModal
-          visible={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          settings={settings}
-          onUpdateSettings={handleUpdateSettings}
-          todos={todos}
-          onDataRestored={handleDataRestored}
-          onShowUpdateInfo={info => {
-            setIsSettingsOpen(false);
-            setReleaseInfo(info);
-            setIsUpdateModalOpen(true);
-          }}
-        />
+      {/* 4. CATEGORY FILTER PILLS */}
+      <CategoryFilter
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+        categoryCounts={categoryCounts}
+        hapticsEnabled={settings.hapticsEnabled}
+      />
 
-        <UpdateModal
-          visible={isUpdateModalOpen}
-          onClose={() => setIsUpdateModalOpen(false)}
-          releaseInfo={releaseInfo}
-        />
+      {/* 5. TODO LIST */}
+      <FlatList
+        data={displayedTodos}
+        keyExtractor={item => item.id}
+        renderItem={({ item }) => (
+          <TodoItem
+            item={item}
+            onToggleComplete={handleToggleComplete}
+            onToggleStar={handleToggleStar}
+            onEdit={itemToEdit => {
+              setEditingItem(itemToEdit);
+              setIsAddModalOpen(true);
+            }}
+            onDelete={handleDeleteTodo}
+            hapticsEnabled={settings.hapticsEnabled}
+          />
+        )}
+        contentContainerStyle={styles.listContent}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyState}>
+            <CatMascot mood="sleeping" size={100} />
+            <Text style={styles.emptyTitle}>
+              {searchQuery ? 'Không tìm thấy việc phù hợp' : 'Chưa có việc nào cho ngày này'}
+            </Text>
+            <Text style={styles.emptySubtitle}>
+              {searchQuery
+                ? 'Hãy thử tìm bằng từ khóa khác nhé!'
+                : 'Mèo Gừng đang ngủ nướng. Nhấn nút + bên dưới để lên kế hoạch ngay! 🐾'}
+            </Text>
+          </View>
+        }
+      />
 
-        <PermissionModal
-          visible={isPermissionModalOpen}
-          onClose={() => {
-            setIsPermissionModalOpen(false);
-            handleUpdateSettings({ ...settings, permissionAsked: true });
-          }}
-          onRequestPermission={handleRequestPermission}
-          alreadyDenied={permissionDenied}
-        />
-      </SafeAreaView>
+      {/* 6. FLOATING ACTION BUTTON (+) */}
+      <TouchableOpacity
+        onPress={() => {
+          triggerHaptic('medium', settings.hapticsEnabled);
+          setEditingItem(null);
+          setIsAddModalOpen(true);
+        }}
+        style={styles.fab}
+        activeOpacity={0.85}
+      >
+        <Plus size={28} color="#FFFFFF" strokeWidth={2.6} />
+      </TouchableOpacity>
+
+      {/* MODALS */}
+      <AddTodoModal
+        visible={isAddModalOpen}
+        onClose={() => {
+          setIsAddModalOpen(false);
+          setEditingItem(null);
+        }}
+        onSave={handleSaveTodo}
+        editingItem={editingItem}
+        targetDate={selectedDate}
+        hapticsEnabled={settings.hapticsEnabled}
+      />
+
+      <SettingsModal
+        visible={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        settings={settings}
+        onUpdateSettings={handleUpdateSettings}
+        todos={todos}
+        onDataRestored={handleDataRestored}
+        onShowUpdateInfo={info => {
+          setIsSettingsOpen(false);
+          setReleaseInfo(info);
+          setIsUpdateModalOpen(true);
+        }}
+      />
+
+      <UpdateModal
+        visible={isUpdateModalOpen}
+        onClose={() => setIsUpdateModalOpen(false)}
+        releaseInfo={releaseInfo}
+      />
+
+      <PermissionModal
+        visible={isPermissionModalOpen}
+        onClose={() => {
+          setIsPermissionModalOpen(false);
+          handleUpdateSettings({ ...settings, permissionAsked: true });
+        }}
+        onRequestPermission={handleRequestPermission}
+        alreadyDenied={permissionDenied}
+      />
+    </SafeAreaView>
+  );
+}
+
+export default function App() {
+  return (
+    <SafeAreaProvider>
+      <MainScreen />
     </SafeAreaProvider>
   );
 }
@@ -471,7 +506,7 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background,
-    paddingTop: Platform.OS === 'android' ? RNStatusBar.currentHeight : 0,
+    paddingTop: Platform.OS === 'android' ? (RNStatusBar.currentHeight || 0) : 0,
   },
   header: {
     flexDirection: 'row',
@@ -558,7 +593,7 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   listContent: {
-    paddingBottom: 90, // Space for FAB on iPhone 13 mini
+    paddingBottom: 90,
     paddingTop: 4,
   },
   emptyState: {
