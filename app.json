@@ -11,6 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#FFF7ED"
     },
+    "updates": {
+      "enabled": false
+    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.vuducmynh.gungtodo",
@@ -41,10 +44,7 @@
       ]
     ],
     "extra": {
-      "githubRepo": "vuducmynh/gung-todo",
-      "eas": {
-        "projectId": "gung-todo-local"
-      }
+      "githubRepo": "vuducmynh/gung-todo"
     }
   }
 }
