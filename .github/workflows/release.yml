@@ -1,0 +1,65 @@
+name: Gừng Todo CI & Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  validate:
+    name: Type Check & Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Verify TypeScript
+        run: npx tsc --noEmit
+
+  create-release:
+    name: Create GitHub Release
+    needs: validate
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Extract Tag Info
+        id: tag_info
+        run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
+          name: Release ${{ steps.tag_info.outputs.TAG_NAME }}
+          body: |
+            🐾 **Gừng Todo - Phiên bản ${{ steps.tag_info.outputs.TAG_NAME }}**
+
+            ### 🚀 Có gì mới:
+            - Tối ưu hóa hiệu năng & trải nghiệm trên iPhone 13 mini.
+            - Đồng bộ và quản lý công việc Todo hằng ngày mượt mà 100% offline.
+            - Lên lịch thông báo sáng 08:00 và chiều 18:00 chuẩn xác.
+            - Hỗ trợ sao lưu và khôi phục an toàn qua ứng dụng Tệp (Files / iCloud Drive).
+
+            ---
+            *Bản phát hành được build và kiểm thử tự động bởi GitHub Actions.*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
