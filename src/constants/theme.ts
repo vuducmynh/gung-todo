@@ -112,14 +112,14 @@ export const DEFAULT_SETTINGS: NotificationSettings = {
     minute: 0,
   },
   soundEnabled: true,
-  soundFxEnabled: true,
+  soundFxEnabled: false,
   hapticsEnabled: true,
   permissionAsked: false,
 };
 
 export const APP_CONFIG = {
   name: 'Gừng Todo',
-  version: '1.0.4',
+  version: '1.0.5',
   githubRepo: 'vuducmynh/gung-todo',
   githubApiUrl: 'https://api.github.com/repos/vuducmynh/gung-todo/releases/latest',
 };

@@ -6,6 +6,8 @@ let popPlayer: any = null;
 try {
   completePlayer = createAudioPlayer(require('../../assets/sounds/complete.wav'));
   popPlayer = createAudioPlayer(require('../../assets/sounds/pop.wav'));
+  if (completePlayer && completePlayer.volume !== undefined) completePlayer.volume = 0.65;
+  if (popPlayer && popPlayer.volume !== undefined) popPlayer.volume = 0.55;
 } catch (error) {
   // Silently fallback if audio subsystem is disabled
 }

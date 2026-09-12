@@ -29,6 +29,7 @@ import {
 import { NotificationSettings, GitHubReleaseInfo, TodoItem } from '../types/todo';
 import { COLORS, APP_CONFIG } from '../constants/theme';
 import { triggerHaptic } from '../utils/haptics';
+import { playSound } from '../utils/sound';
 import { exportBackupToFile, restoreFromBackupData } from '../services/backup';
 import { triggerTestNotification, scheduleDailyNotifications } from '../services/notifications';
 import { checkForGitHubUpdate } from '../services/updater';
@@ -65,6 +66,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const toggleSetting = (key: keyof NotificationSettings) => {
     triggerHaptic('selection', settings.hapticsEnabled);
     const updated = { ...settings, [key]: !settings[key] };
+    if (key === 'soundFxEnabled' && updated.soundFxEnabled) {
+      playSound('complete', true);
+    }
     onUpdateSettings(updated);
     scheduleDailyNotifications(todos, updated);
   };
@@ -258,7 +262,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <View style={styles.settingRow}>
                 <View style={styles.settingTextCol}>
                   <Text style={styles.settingLabel}>Âm thanh thao tác (Sound FX)</Text>
-                  <Text style={styles.settingSub}>Tiếng chuông hoàn thành và tiếng pop chân thực</Text>
+                  <Text style={styles.settingSub}>Tiếng chuông gỗ Kalimba và bọt nước nhẹ nhàng</Text>
                 </View>
                 <Switch
                   value={settings.soundFxEnabled}
