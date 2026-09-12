@@ -411,7 +411,12 @@ function MainScreen() {
 
     if (granted) {
       triggerHaptic('success', settings.hapticsEnabled);
-      Alert.alert('Thành công! 🐱✨', 'Mèo Gừng sẽ nhắc bạn đúng giờ vào 08:00 sáng và 18:00 chiều nhé!');
+      const hourStr = String(settings.eveningTime?.hour ?? 18).padStart(2, '0');
+      const minStr = String(settings.eveningTime?.minute ?? 0).padStart(2, '0');
+      Alert.alert(
+        'Thành công! 🐱✨',
+        `Mèo Gừng sẽ nhắc bạn lúc ${hourStr}:${minStr} nếu còn công việc chưa hoàn thành nhé!`
+      );
     } else {
       setPermissionDenied(true);
     }

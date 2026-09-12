@@ -54,8 +54,7 @@ export const PermissionModal: React.FC<PermissionModalProps> = ({
           <Text style={styles.title}>Đừng bỏ lỡ việc quan trọng!</Text>
 
           <Text style={styles.description}>
-            Mèo Gừng sẽ nhắc bạn vào lúc <Text style={styles.bold}>08:00 sáng</Text> để lên dây cót và{' '}
-            <Text style={styles.bold}>18:00 chiều</Text> để rà soát công việc trước khi tan làm. Hoạt động 100% offline, không phiền phức! 🐾
+            Mèo Gừng chỉ nhắc 1 lần duy nhất trong ngày (mặc định <Text style={styles.bold}>18:00</Text>) nếu bạn còn công việc chưa hoàn tất. Buổi sáng hoàn toàn yên tĩnh và không gửi thông báo nếu đã xong hết việc! 🐾
           </Text>
 
           {alreadyDenied ? (

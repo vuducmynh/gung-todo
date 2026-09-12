@@ -107,8 +107,7 @@ export const scheduleDailyNotifications = async (
     }
 
     const today = getTodayString();
-    const todayTodos = todos.filter(t => t.date === today);
-    const pendingTodos = todayTodos.filter(t => !t.completed);
+    const pendingTodos = todos.filter(t => !t.completed && (!t.date || t.date <= today));
     const pendingCount = pendingTodos.length;
 
     // QUY TẮC: Nếu không có việc gì chưa hoàn thành hôm nay -> KHÔNG gửi thông báo làm phiền!
