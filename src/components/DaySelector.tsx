@@ -101,21 +101,26 @@ const styles = StyleSheet.create({
   dateCenter: {
     alignItems: 'center',
     flex: 1,
+    flexShrink: 1,
+    marginHorizontal: 6,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
+    flexWrap: 'nowrap',
   },
   dateTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: COLORS.text,
+    flexShrink: 1,
   },
   dateSubtitle: {
     fontSize: 12,
     color: COLORS.textMuted,
     marginTop: 2,
+    textAlign: 'center',
   },
   pastTag: {
     flexDirection: 'row',

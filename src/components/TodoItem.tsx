@@ -209,17 +209,20 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     flex: 1,
+    flexShrink: 1,
+    paddingRight: 6,
   },
   titleRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingRight: 4,
   },
   title: {
     fontSize: 15,
     fontWeight: '600',
     color: COLORS.text,
     lineHeight: 21,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   titleCompleted: {
     textDecorationLine: 'line-through',

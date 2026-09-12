@@ -32,8 +32,8 @@ export const setupNotificationChannel = async () => {
         enableVibrate: true,
         showBadge: true,
       });
-    } catch (error) {
-      console.warn('Could not setup Android notification channel:', error);
+    } catch {
+      // Silently ignore channel errors in Expo Go where FCM is not initialized
     }
   }
 };

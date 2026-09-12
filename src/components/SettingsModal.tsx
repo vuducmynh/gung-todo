@@ -40,6 +40,7 @@ interface SettingsModalProps {
   todos: TodoItem[];
   onDataRestored: () => void;
   onShowUpdateInfo: (info: GitHubReleaseInfo) => void;
+  currentVersion?: string;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -50,7 +51,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   todos,
   onDataRestored,
   onShowUpdateInfo,
+  currentVersion,
 }) => {
+  const activeVersion = currentVersion || APP_CONFIG.version;
   const [checkingUpdate, setCheckingUpdate] = useState(false);
   const [showRestoreInput, setShowRestoreInput] = useState(false);
   const [restoreText, setRestoreText] = useState('');
@@ -136,13 +139,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     triggerHaptic('medium', settings.hapticsEnabled);
     setCheckingUpdate(true);
     try {
-      const releaseInfo = await checkForGitHubUpdate(APP_CONFIG.version);
+      const releaseInfo = await checkForGitHubUpdate(activeVersion);
       if (releaseInfo && releaseInfo.hasUpdate) {
         onShowUpdateInfo(releaseInfo);
       } else {
         Alert.alert(
           'Đã là bản mới nhất! 🐱✨',
-          `Gừng Todo v${APP_CONFIG.version} đang là phiên bản mới nhất trên GitHub.`
+          `Gừng Todo v${activeVersion} đang là phiên bản mới nhất trên GitHub.`
         );
       }
     } catch {
@@ -219,7 +222,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               >
                 <View style={styles.actionItemLeft}>
                   <Clock size={16} color={COLORS.primary} />
-                  <Text style={styles.actionItemText}>Thử nghiệm nhận thông báo ngay (3 giây)</Text>
+                  <Text style={styles.actionItemText}>Thử thông báo ngay (3s)</Text>
                 </View>
                 <CheckCircle2 size={16} color={COLORS.success} />
               </TouchableOpacity>
@@ -427,7 +430,8 @@ const styles = StyleSheet.create({
   },
   settingTextCol: {
     flex: 1,
-    paddingRight: 10,
+    flexShrink: 1,
+    paddingRight: 12,
   },
   settingLabel: {
     fontSize: 14,
@@ -455,11 +459,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     flex: 1,
+    flexShrink: 1,
+    marginRight: 10,
   },
   actionItemText: {
     fontSize: 13,
     fontWeight: '600',
     color: COLORS.text,
+    flexShrink: 1,
   },
   testStatusText: {
     fontSize: 12,

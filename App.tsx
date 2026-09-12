@@ -9,8 +9,18 @@ import {
   Alert,
   Platform,
   TextInput,
+  LogBox,
 } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+
+LogBox.ignoreLogs([
+  '`expo-notifications` functionality is not fully supported in Expo Go',
+  'Cannot connect to Expo CLI',
+  'Could not setup Android notification channel',
+  'expo-notifications:',
+  'Call to function',
+]);
 import { StatusBar } from 'expo-status-bar';
 import {
   Plus,
@@ -52,6 +62,7 @@ import { PermissionModal } from './src/components/PermissionModal';
 function MainScreen() {
   const [todos, setTodos] = useState<TodoItemType[]>([]);
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
+  const [appVersion, setAppVersion] = useState<string>(APP_CONFIG.version);
   const [selectedDate, setSelectedDate] = useState<string>(getTodayString());
   const [selectedCategory, setSelectedCategory] = useState<CategoryId>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -75,6 +86,13 @@ function MainScreen() {
         // Setup Android channel first
         if (Platform.OS === 'android') {
           await setupNotificationChannel();
+        }
+
+        // Load saved app version
+        const savedVersion = await AsyncStorage.getItem('@gung_app_version');
+        const activeVer = savedVersion || APP_CONFIG.version;
+        if (savedVersion && isMounted) {
+          setAppVersion(savedVersion);
         }
 
         // Load saved settings
@@ -110,7 +128,7 @@ function MainScreen() {
 
         // Check GitHub update in background
         try {
-          const update = await checkForGitHubUpdate(APP_CONFIG.version);
+          const update = await checkForGitHubUpdate(activeVer);
           if (update && update.hasUpdate && isMounted) {
             setReleaseInfo(update);
             setIsUpdateModalOpen(true);
@@ -312,6 +330,13 @@ function MainScreen() {
     }
   };
 
+  const handleApplyUpdate = async (newVersion: string) => {
+    setAppVersion(newVersion);
+    await AsyncStorage.setItem('@gung_app_version', newVersion);
+    setReleaseInfo(null);
+    triggerHaptic('success', settings.hapticsEnabled);
+  };
+
   return (
     <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
       <StatusBar style="dark" />
@@ -326,7 +351,7 @@ function MainScreen() {
             <View style={styles.titleContainer}>
               <Text style={styles.brandTitle}>Gừng Todo</Text>
               <View style={styles.versionPill}>
-                <Text style={styles.versionPillText}>v{APP_CONFIG.version}</Text>
+                <Text style={styles.versionPillText}>v{appVersion}</Text>
               </View>
             </View>
             <Text style={styles.brandSubtitle}>Mèo cam nhắc việc đúng giờ 🐾</Text>
@@ -468,6 +493,7 @@ function MainScreen() {
         onUpdateSettings={handleUpdateSettings}
         todos={todos}
         onDataRestored={handleDataRestored}
+        currentVersion={appVersion}
         onShowUpdateInfo={info => {
           setIsSettingsOpen(false);
           setReleaseInfo(info);
@@ -479,6 +505,8 @@ function MainScreen() {
         visible={isUpdateModalOpen}
         onClose={() => setIsUpdateModalOpen(false)}
         releaseInfo={releaseInfo}
+        onApplyUpdate={handleApplyUpdate}
+        hapticsEnabled={settings.hapticsEnabled}
       />
 
       <PermissionModal
