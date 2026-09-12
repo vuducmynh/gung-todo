@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Modal,
   View,
@@ -7,8 +7,13 @@ import {
   StyleSheet,
   ScrollView,
   ActivityIndicator,
+  Platform,
+  Linking,
+  Alert,
 } from 'react-native';
-import { Sparkles, Check, X, ArrowDownCircle, RefreshCw } from 'lucide-react-native';
+import { Sparkles, Check, X, ArrowDownCircle, ExternalLink, Download } from 'lucide-react-native';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { GitHubReleaseInfo } from '../types/todo';
 import { COLORS } from '../constants/theme';
 import { CatMascot } from './CatMascot';
@@ -30,40 +35,127 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
   onApplyUpdate,
   hapticsEnabled = true,
 }) => {
-  const [updateState, setUpdateState] = useState<'idle' | 'downloading' | 'installing' | 'completed'>('idle');
+  const [updateState, setUpdateState] = useState<'idle' | 'downloading' | 'installing' | 'completed' | 'error'>('idle');
   const [progress, setProgress] = useState(0);
+  const [statusMessage, setStatusMessage] = useState('');
+  const downloadTaskRef = useRef<FileSystem.DownloadResumable | null>(null);
 
   useEffect(() => {
     if (visible) {
       setUpdateState('idle');
       setProgress(0);
+      setStatusMessage('');
     }
   }, [visible]);
 
   if (!releaseInfo) return null;
 
-  const handleStartUpdate = () => {
+  const handleStartUpdate = async () => {
     triggerHaptic('medium', hapticsEnabled);
-    setUpdateState('downloading');
-    setProgress(15);
 
-    // Simulate fast bundle download and patch application in 1.5s
-    const timer1 = setTimeout(() => setProgress(55), 400);
-    const timer2 = setTimeout(() => {
-      setProgress(90);
+    // 1. Android: If APK asset is available, download directly!
+    if (Platform.OS === 'android' && releaseInfo.apkUrl) {
+      try {
+        setUpdateState('downloading');
+        setProgress(5);
+        setStatusMessage('Đang kết nối đến GitHub...');
+
+        const targetFileName = releaseInfo.apkName || `GungTodo-v${releaseInfo.latestVersion}.apk`;
+        const localUri = `${FileSystem.documentDirectory}${targetFileName}`;
+
+        const downloadResumable = FileSystem.createDownloadResumable(
+          releaseInfo.apkUrl,
+          localUri,
+          {},
+          (downloadProgress) => {
+            if (downloadProgress.totalBytesExpectedToWrite > 0) {
+              const percent = Math.round(
+                (downloadProgress.totalBytesWritten / downloadProgress.totalBytesExpectedToWrite) * 100
+              );
+              setProgress(Math.min(percent, 99));
+              setStatusMessage(`Đang tải file APK (${percent}%)...`);
+            }
+          }
+        );
+        downloadTaskRef.current = downloadResumable;
+
+        const downloadResult = await downloadResumable.downloadAsync();
+
+        if (downloadResult && downloadResult.uri) {
+          setProgress(100);
+          setUpdateState('installing');
+          setStatusMessage('Tải xong! Đang mở trình cài đặt APK...');
+          triggerHaptic('success', hapticsEnabled);
+
+          // Prompt user to install the APK
+          try {
+            await Sharing.shareAsync(downloadResult.uri, {
+              mimeType: 'application/vnd.android.package-archive',
+              dialogTitle: 'Cài đặt bản cập nhật Gừng Todo',
+            });
+          } catch {
+            // If share fails, fallback to direct open
+            await Linking.openURL(releaseInfo.apkUrl);
+          }
+
+          setUpdateState('completed');
+          setStatusMessage('Vui lòng làm theo hướng dẫn trên màn hình để hoàn tất cài đặt.');
+        } else {
+          throw new Error('Không thể lưu file APK.');
+        }
+      } catch (err: any) {
+        console.warn('APK download error:', err);
+        setUpdateState('error');
+        setStatusMessage('Không thể tải file tự động. Bạn có thể mở trình duyệt để tải trực tiếp.');
+      }
+      return;
+    }
+
+    // 2. iOS or Fallback: Show options
+    if (Platform.OS === 'ios') {
+      // On iOS, Apple sandbox prohibits self-updating binary
+      Alert.alert(
+        'Cập nhật trên iOS 🍎',
+        'Hệ điều hành iOS yêu cầu cập nhật ứng dụng thông qua TestFlight hoặc cài file IPA qua Sideloadly trên máy tính.\n\nBạn có muốn mở trang phát hành GitHub để xem chi tiết?',
+        [
+          { text: 'Để sau', style: 'cancel' },
+          {
+            text: 'Mở trang GitHub',
+            onPress: () => {
+              Linking.openURL(releaseInfo.htmlUrl);
+            },
+          },
+          {
+            text: 'Đã cập nhật xong',
+            onPress: () => {
+              if (typeof onApplyUpdate === 'function') {
+                onApplyUpdate(releaseInfo.latestVersion);
+              }
+              onClose();
+            },
+          },
+        ]
+      );
+      return;
+    }
+
+    // 3. Fallback when running in development/Expo Go
+    setUpdateState('downloading');
+    setProgress(30);
+    setStatusMessage('Đang tải dữ liệu phiên bản mới...');
+
+    setTimeout(() => {
+      setProgress(75);
       setUpdateState('installing');
-    }, 800);
-    const timer3 = setTimeout(() => {
+      setStatusMessage('Đang áp dụng thay đổi...');
+    }, 600);
+
+    setTimeout(() => {
       setProgress(100);
       setUpdateState('completed');
+      setStatusMessage('Cập nhật hoàn tất!');
       triggerHaptic('success', hapticsEnabled);
-    }, 1300);
-
-    return () => {
-      clearTimeout(timer1);
-      clearTimeout(timer2);
-      clearTimeout(timer3);
-    };
+    }, 1200);
   };
 
   const handleFinishUpdate = () => {
@@ -126,9 +218,9 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
                 <View style={[styles.progressBarFill, { width: `${progress}%` }]} />
               </View>
               <Text style={styles.progressText}>
-                {updateState === 'completed'
+                {statusMessage || (updateState === 'completed'
                   ? 'Hoàn tất 100%! Sẵn sàng sử dụng.'
-                  : `${progress}% - Đang tối ưu hiệu năng...`}
+                  : `${progress}% - Đang xử lý...`)}
               </Text>
             </View>
           )}
@@ -158,6 +250,15 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
               >
                 <Check size={18} color="#FFFFFF" strokeWidth={2.8} />
                 <Text style={styles.finishBtnText}>Áp dụng ngay</Text>
+              </TouchableOpacity>
+            ) : updateState === 'error' ? (
+              <TouchableOpacity
+                onPress={() => Linking.openURL(releaseInfo.apkUrl || releaseInfo.htmlUrl)}
+                style={styles.updateBtn}
+                activeOpacity={0.8}
+              >
+                <ExternalLink size={16} color="#FFFFFF" />
+                <Text style={styles.updateBtnText}>Tải qua trình duyệt 🌐</Text>
               </TouchableOpacity>
             ) : (
               <View style={styles.loadingBox}>

@@ -54,6 +54,11 @@ export const checkForGitHubUpdate = async (
 
     const hasUpdate = compareVersions(cleanTag, currentVersion) > 0;
 
+    // Find any downloadable APK in release assets
+    const apkAsset = Array.isArray(data.assets)
+      ? data.assets.find((a: any) => typeof a?.name === 'string' && a.name.endsWith('.apk'))
+      : null;
+
     return {
       hasUpdate,
       currentVersion,
@@ -62,6 +67,9 @@ export const checkForGitHubUpdate = async (
       releaseNotes: data.body || 'Bản cập nhật mới với nhiều cải tiến hiệu năng và sửa lỗi!',
       htmlUrl: data.html_url || `https://github.com/${repo}/releases`,
       publishedAt: data.published_at || new Date().toISOString(),
+      apkUrl: apkAsset?.browser_download_url,
+      apkSize: apkAsset?.size,
+      apkName: apkAsset?.name,
     };
   } catch (error) {
     console.log('Update check info:', error);

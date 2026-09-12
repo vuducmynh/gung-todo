@@ -58,6 +58,9 @@ export interface GitHubReleaseInfo {
   releaseNotes: string;
   htmlUrl: string;
   publishedAt: string;
+  apkUrl?: string;
+  apkSize?: number;
+  apkName?: string;
 }
 
 export type MascotMood = 'sleeping' | 'happy' | 'focused' | 'celebrating';

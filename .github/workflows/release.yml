@@ -28,9 +28,67 @@ jobs:
       - name: Verify TypeScript
         run: npx tsc --noEmit
 
-  create-release:
-    name: Create GitHub Release
+  build-android:
+    name: Build Android APK
     needs: validate
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: 17
+          cache: 'gradle'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Prebuild Native Android
+        run: npx expo prebuild --platform android --clean --no-install
+
+      - name: Build Android Release APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+
+      - name: Prepare APK Asset
+        id: prepare_apk
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          mkdir -p ./build-output
+          APK_FILE=$(find android/app/build/outputs/apk -name "*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "Error: No APK found after build!"
+            exit 1
+          fi
+          echo "Found APK at: $APK_FILE"
+          cp "$APK_FILE" "./build-output/GungTodo-${TAG_NAME}.apk"
+          echo "Prepared: ./build-output/GungTodo-${TAG_NAME}.apk"
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-apk
+          path: ./build-output/GungTodo-*.apk
+          if-no-files-found: error
+
+  create-release:
+    name: Publish Release with Assets
+    needs: [validate, build-android]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
@@ -43,22 +101,52 @@ jobs:
         id: tag_info
         run: echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Create Release
+      - name: Download Built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: android-apk
+          path: ./release-artifacts
+
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag_info.outputs.TAG_NAME }}
-          name: Release ${{ steps.tag_info.outputs.TAG_NAME }}
+          name: Gừng Todo ${{ steps.tag_info.outputs.TAG_NAME }}
+          files: |
+            ./release-artifacts/*.apk
           body: |
             🐾 **Gừng Todo - Phiên bản ${{ steps.tag_info.outputs.TAG_NAME }}**
 
-            ### 🚀 Có gì mới:
-            - Tối ưu hóa hiệu năng & trải nghiệm trên iPhone 13 mini.
-            - Đồng bộ và quản lý công việc Todo hằng ngày mượt mà 100% offline.
-            - Lên lịch thông báo sáng 08:00 và chiều 18:00 chuẩn xác.
-            - Hỗ trợ sao lưu và khôi phục an toàn qua ứng dụng Tệp (Files / iCloud Drive).
+            ---
+
+            ### 📱 Hướng dẫn Cài đặt cho Người dùng:
+
+            #### 🤖 Đối với người dùng Android:
+            - **Tải trực tiếp:** Bấm tải file **`GungTodo-${{ steps.tag_info.outputs.TAG_NAME }}.apk`** đính kèm ngay trong mục **Assets** bên dưới.
+            - **Cài đặt:** Mở file vừa tải về $\rightarrow$ Chọn *Cài đặt* (cho phép cài từ nguồn này nếu máy hỏi) $\rightarrow$ Mở app và sử dụng ngay lập tức!
+            - **Cập nhật:** Có thể cập nhật tự động trực tiếp ngay từ trong app khi có bản mới.
+
+            #### 🍎 Đối với người dùng iPhone (iOS / iPhone 13 mini):
+            *Do chính sách bảo mật hệ thống của Apple chặn việc cài đặt trực tiếp file từ trình duyệt Safari, bạn có thể cài ứng dụng theo các cách sau:*
+            1. **Cách 1: Cài đặt không cần Jailbreak qua máy tính (Khuyên dùng):**
+               - Tải phần mềm miễn phí [Sideloadly](https://sideloadly.io/) hoặc [AltStore](https://altstore.io/) về máy tính (Windows hoặc Mac).
+               - Kết nối iPhone với máy tính, nhập Apple ID cá nhân để tự ký chứng chỉ và cài app vào máy.
+            2. **Cách 2: Sử dụng qua Expo Go (Nhanh nhất cho nhà phát triển):**
+               - Cài ứng dụng **Expo Go** từ App Store trên iPhone.
+               - Quét mã QR của dự án để mở app đầy đủ tính năng.
+            3. **Cách 3: Bản cài đặt 1-chạm chính thức (TestFlight / App Store):**
+               - Đăng ký qua chương trình Apple Developer ($99/năm) để mở link TestFlight 1 chạm cho mọi người dùng.
 
             ---
-            *Bản phát hành được build và kiểm thử tự động bởi GitHub Actions.*
+
+            ### 🚀 Điểm mới trong phiên bản này:
+            - ⏰ **Thông báo thông minh 1 lần/ngày:** Chỉ gửi duy nhất 1 lần vào buổi chiều (mặc định 18:00 hoặc tùy chỉnh) nếu còn việc chưa hoàn tất. Tự động hủy nếu đã xong hết việc.
+            - ⏱️ **Bộ chọn giờ điện tử:** Chỉnh giờ thông báo linh hoạt kèm các phím tắt chọn nhanh (17:00, 18:00, 19:00,...).
+            - 🏷️ **Quản lý danh mục cá nhân:** Tùy ý thêm, sửa, xóa nhãn với bảng 8 màu sắc pastel.
+            - ↕️ **Sắp xếp thứ tự việc linh hoạt:** Tay cầm kéo thả `⋮⋮` cùng thanh công cụ di chuyển việc nhanh (Lên, Xuống, Lên đầu, Về cuối).
+            - 🎵 **Âm thanh mộc Kalimba & Rung Haptic:** Trải nghiệm xúc giác chân thực, mặc định yên tĩnh và êm ái.
+            - 📦 **Sao lưu an toàn 100% Offline:** Xuất/nhập file JSON trực tiếp vào ứng dụng Tệp (Files / iCloud Drive) để không bao giờ mất dữ liệu.
+            - 🔄 **Cập nhật trực tiếp In-App:** Tự động kiểm tra bản phát hành mới từ GitHub và tải file APK trực tiếp trong ứng dụng.
           draft: false
           prerelease: false
         env:
