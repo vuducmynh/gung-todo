@@ -101,7 +101,7 @@ export const CATEGORIES: Category[] = [
 ];
 
 export const DEFAULT_SETTINGS: NotificationSettings = {
-  morningEnabled: true,
+  morningEnabled: false,
   morningTime: {
     hour: 8,
     minute: 0,
@@ -119,7 +119,7 @@ export const DEFAULT_SETTINGS: NotificationSettings = {
 
 export const APP_CONFIG = {
   name: 'Gừng Todo',
-  version: '1.0.5',
+  version: '1.0.6',
   githubRepo: 'vuducmynh/gung-todo',
   githubApiUrl: 'https://api.github.com/repos/vuducmynh/gung-todo/releases/latest',
 };

@@ -111,44 +111,23 @@ export const scheduleDailyNotifications = async (
     const pendingTodos = todayTodos.filter(t => !t.completed);
     const pendingCount = pendingTodos.length;
 
-    // 1. Morning Notification (Lên dây cót buổi sáng)
-    if (settings.morningEnabled) {
-      const morningBody =
-        pendingCount > 0
-          ? `Hôm nay bạn có ${pendingCount} việc cần làm. Cùng Mèo Gừng bắt đầu ngày mới thật năng suất nhé! 🐱✨`
-          : 'Chào ngày mới! Hãy lên danh sách các việc cần làm hôm nay cùng Mèo Gừng nhé! 🐾';
-
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: '☀️ Chào buổi sáng từ Mèo Gừng!',
-          body: morningBody,
-          sound: settings.soundEnabled,
-          badge: pendingCount,
-          data: { type: 'morning_check', date: today },
-          ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
-        },
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
-          hour: settings.morningTime.hour,
-          minute: settings.morningTime.minute,
-        },
-      });
+    // QUY TẮC: Nếu không có việc gì chưa hoàn thành hôm nay -> KHÔNG gửi thông báo làm phiền!
+    if (pendingCount === 0) {
+      return true;
     }
 
-    // 2. Evening Notification (Kiểm tra tan làm / trước khi ngủ)
+    // Thông báo duy nhất 1 lần trong ngày vào cuối buổi chiều (mặc định 18:00 hoặc giờ người dùng chọn)
     if (settings.eveningEnabled) {
-      const eveningBody =
-        pendingCount === 0
-          ? '🎉 Tuyệt đỉnh! Bạn đã hoàn thành tất cả công việc của ngày hôm nay rồi! Thư giãn nghỉ ngơi thôi nào! 🐾'
-          : `⏰ Sắp hết ngày rồi, bạn vẫn còn ${pendingCount} việc chưa tick xong. Vào kiểm tra lại với Mèo Gừng nhé! 🐱`;
+      const reminderTitle = '🐾 Mèo Gừng nhắc việc';
+      const reminderBody = `Hôm nay bạn còn ${pendingCount} công việc chưa hoàn tất nè. Vào kiểm tra lại cùng Mèo Gừng nhé! 🐱✨`;
 
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: '🌙 Chiều tan làm rồi nè!',
-          body: eveningBody,
+          title: reminderTitle,
+          body: reminderBody,
           sound: settings.soundEnabled,
           badge: pendingCount,
-          data: { type: 'evening_check', date: today },
+          data: { type: 'daily_evening_reminder', date: today, count: pendingCount },
           ...(Platform.OS === 'android' ? { channelId: 'default' } : {}),
         },
         trigger: {

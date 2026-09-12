@@ -25,6 +25,9 @@ import {
   ExternalLink,
   CheckCircle2,
   Tag,
+  ChevronUp,
+  ChevronDown,
+  Check,
 } from 'lucide-react-native';
 import { NotificationSettings, GitHubReleaseInfo, TodoItem } from '../types/todo';
 import { COLORS, APP_CONFIG } from '../constants/theme';
@@ -46,6 +49,16 @@ interface SettingsModalProps {
   currentVersion?: string;
 }
 
+const QUICK_PRESETS = [
+  { label: '17:00', hour: 17, minute: 0 },
+  { label: '17:30', hour: 17, minute: 30 },
+  { label: '18:00 (Mặc định)', hour: 18, minute: 0 },
+  { label: '18:30', hour: 18, minute: 30 },
+  { label: '19:00', hour: 19, minute: 0 },
+  { label: '20:00', hour: 20, minute: 0 },
+  { label: '21:00', hour: 21, minute: 0 },
+];
+
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   visible,
   onClose,
@@ -62,6 +75,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showRestoreInput, setShowRestoreInput] = useState(false);
   const [restoreText, setRestoreText] = useState('');
   const [testNotificationStatus, setTestNotificationStatus] = useState<string | null>(null);
+
+  const [isTimePickerOpen, setIsTimePickerOpen] = useState(false);
+  const [pickerHour, setPickerHour] = useState(settings.eveningTime?.hour ?? 18);
+  const [pickerMinute, setPickerMinute] = useState(settings.eveningTime?.minute ?? 0);
+
+  const openTimePicker = () => {
+    triggerHaptic('selection', settings.hapticsEnabled);
+    setPickerHour(settings.eveningTime?.hour ?? 18);
+    setPickerMinute(settings.eveningTime?.minute ?? 0);
+    setIsTimePickerOpen(true);
+  };
+
+  const handleSaveTime = (hour: number, minute: number) => {
+    triggerHaptic('success', settings.hapticsEnabled);
+    updateTime('evening', hour, minute);
+    setIsTimePickerOpen(false);
+  };
 
   const toggleSetting = (key: keyof NotificationSettings) => {
     triggerHaptic('selection', settings.hapticsEnabled);
@@ -177,41 +207,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </View>
 
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-            {/* 1. THÔNG BÁO HẸN GIỜ OFFLINE */}
+            {/* 1. THÔNG BÁO HẸN GIỜ OFFLINE (1 LẦN TRONG NGÀY) */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <Bell size={18} color={COLORS.primary} />
-                <Text style={styles.sectionTitle}>Thông báo Hẹn giờ Offline</Text>
+                <Text style={styles.sectionTitle}>Nhắc việc hằng ngày (1 lần/ngày)</Text>
               </View>
               <Text style={styles.sectionDesc}>
-                Tự động đánh thức và nhắc nhở 100% offline mà không cần server hay internet.
+                Thông báo tổng hợp toàn app: Chỉ nhắc 1 lần lúc {String(settings.eveningTime.hour).padStart(2, '0')}:{String(settings.eveningTime.minute).padStart(2, '0')} nếu còn việc chưa tick hoàn thành. Nếu không có việc gì tồn đọng sẽ không làm phiền.
               </Text>
 
-              {/* Sáng */}
+              {/* Bật/Tắt nhắc nhở */}
               <View style={styles.settingRow}>
                 <View style={styles.settingTextCol}>
-                  <Text style={styles.settingLabel}>☀️ Nhắc việc Buổi Sáng</Text>
+                  <Text style={styles.settingLabel}>Bật nhắc việc cuối ngày</Text>
                   <Text style={styles.settingSub}>
-                    Lên dây cót mục tiêu lúc{' '}
-                    {String(settings.morningTime.hour).padStart(2, '0')}:
-                    {String(settings.morningTime.minute).padStart(2, '0')}
-                  </Text>
-                </View>
-                <Switch
-                  value={settings.morningEnabled}
-                  onValueChange={() => toggleSetting('morningEnabled')}
-                  trackColor={{ false: COLORS.border, true: COLORS.primary }}
-                />
-              </View>
-
-              {/* Chiều tan làm */}
-              <View style={styles.settingRow}>
-                <View style={styles.settingTextCol}>
-                  <Text style={styles.settingLabel}>🌙 Nhắc kiểm tra Chiều Tan Làm</Text>
-                  <Text style={styles.settingSub}>
-                    Rà soát công việc lúc{' '}
-                    {String(settings.eveningTime.hour).padStart(2, '0')}:
-                    {String(settings.eveningTime.minute).padStart(2, '0')}
+                    {settings.eveningEnabled
+                      ? `Đang bật (Nhắc lúc ${String(settings.eveningTime.hour).padStart(2, '0')}:${String(settings.eveningTime.minute).padStart(2, '0')})`
+                      : 'Đang tắt'}
                   </Text>
                 </View>
                 <Switch
@@ -220,6 +233,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   trackColor={{ false: COLORS.border, true: COLORS.primary }}
                 />
               </View>
+
+              {/* Nút Chỉnh Giờ Nhắc Việc */}
+              <TouchableOpacity
+                onPress={openTimePicker}
+                style={styles.timeSettingBtn}
+                activeOpacity={0.7}
+              >
+                <View style={styles.timeSettingLeft}>
+                  <Clock size={16} color={COLORS.primary} />
+                  <View>
+                    <Text style={styles.timeSettingTitle}>Giờ gửi thông báo:</Text>
+                    <Text style={styles.timeSettingHint}>Chạm để đổi giờ nhắc ⏰</Text>
+                  </View>
+                </View>
+                <View style={styles.timeBadge}>
+                  <Text style={styles.timeBadgeText}>
+                    {String(settings.eveningTime.hour).padStart(2, '0')}:
+                    {String(settings.eveningTime.minute).padStart(2, '0')} ✎
+                  </Text>
+                </View>
+              </TouchableOpacity>
 
               {/* Nút Test Notification */}
               <TouchableOpacity
@@ -398,6 +432,140 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </ScrollView>
         </View>
       </View>
+
+      {/* TIME PICKER MODAL */}
+      <Modal
+        visible={isTimePickerOpen}
+        animationType="fade"
+        transparent={true}
+        onRequestClose={() => setIsTimePickerOpen(false)}
+      >
+        <View style={styles.timePickerOverlay}>
+          <TouchableOpacity
+            style={styles.backdrop}
+            activeOpacity={1}
+            onPress={() => setIsTimePickerOpen(false)}
+          />
+          <View style={styles.timePickerCard}>
+            <View style={styles.timePickerHeader}>
+              <View style={styles.titleRow}>
+                <Clock size={18} color={COLORS.primary} />
+                <Text style={styles.timePickerTitle}>Chỉnh Giờ Nhắc Việc</Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setIsTimePickerOpen(false)}
+                style={styles.closeMiniBtn}
+              >
+                <X size={16} color={COLORS.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Visual Digital Clock */}
+            <View style={styles.clockBox}>
+              {/* Hour Spinner */}
+              <View style={styles.timeUnitCol}>
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerHaptic('selection', settings.hapticsEnabled);
+                    setPickerHour(prev => (prev + 1) % 24);
+                  }}
+                  style={styles.spinnerArrow}
+                >
+                  <ChevronUp size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.digitalDigits}>
+                  {String(pickerHour).padStart(2, '0')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerHaptic('selection', settings.hapticsEnabled);
+                    setPickerHour(prev => (prev - 1 + 24) % 24);
+                  }}
+                  style={styles.spinnerArrow}
+                >
+                  <ChevronDown size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.unitLabel}>Giờ</Text>
+              </View>
+
+              <Text style={styles.digitalColon}>:</Text>
+
+              {/* Minute Spinner */}
+              <View style={styles.timeUnitCol}>
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerHaptic('selection', settings.hapticsEnabled);
+                    setPickerMinute(prev => (prev + 5) % 60);
+                  }}
+                  style={styles.spinnerArrow}
+                >
+                  <ChevronUp size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.digitalDigits}>
+                  {String(pickerMinute).padStart(2, '0')}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerHaptic('selection', settings.hapticsEnabled);
+                    setPickerMinute(prev => (prev - 5 + 60) % 60);
+                  }}
+                  style={styles.spinnerArrow}
+                >
+                  <ChevronDown size={24} color={COLORS.primary} />
+                </TouchableOpacity>
+                <Text style={styles.unitLabel}>Phút</Text>
+              </View>
+            </View>
+
+            {/* Quick Presets */}
+            <Text style={styles.presetsLabel}>Mốc giờ gợi ý:</Text>
+            <View style={styles.presetsGrid}>
+              {QUICK_PRESETS.map(preset => {
+                const isSelected = pickerHour === preset.hour && pickerMinute === preset.minute;
+                return (
+                  <TouchableOpacity
+                    key={preset.label}
+                    onPress={() => {
+                      triggerHaptic('selection', settings.hapticsEnabled);
+                      setPickerHour(preset.hour);
+                      setPickerMinute(preset.minute);
+                    }}
+                    style={[
+                      styles.presetPill,
+                      isSelected && styles.presetPillSelected,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.presetPillText,
+                        isSelected && styles.presetPillTextSelected,
+                      ]}
+                    >
+                      {preset.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
+            <Text style={styles.timeHelpText}>
+              🐾 Chỉ nhắc 1 lần lúc này nếu bạn còn việc chưa tick hoàn thành.
+            </Text>
+
+            {/* Save Button */}
+            <TouchableOpacity
+              onPress={() => handleSaveTime(pickerHour, pickerMinute)}
+              style={styles.saveTimeBtn}
+              activeOpacity={0.8}
+            >
+              <Check size={16} color="#FFFFFF" strokeWidth={2.8} />
+              <Text style={styles.saveTimeBtnText}>
+                Lưu giờ nhắc: {String(pickerHour).padStart(2, '0')}:{String(pickerMinute).padStart(2, '0')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </Modal>
   );
 };
@@ -579,5 +747,186 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.primary,
+  },
+  timeSettingBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  timeSettingLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  timeSettingTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: COLORS.text,
+  },
+  timeSettingHint: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  timeBadge: {
+    backgroundColor: COLORS.primaryLight,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+  },
+  timeBadgeText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  timePickerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.45)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  timePickerCard: {
+    backgroundColor: COLORS.surface,
+    borderRadius: 22,
+    padding: 20,
+    width: '100%',
+    maxWidth: 320,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  timePickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  timePickerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: COLORS.text,
+  },
+  closeMiniBtn: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: COLORS.surfaceAlt,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  clockBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  },
+  timeUnitCol: {
+    alignItems: 'center',
+  },
+  spinnerArrow: {
+    padding: 4,
+  },
+  digitalDigits: {
+    fontSize: 34,
+    fontWeight: '800',
+    color: COLORS.text,
+    minWidth: 54,
+    textAlign: 'center',
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  unitLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: COLORS.textMuted,
+    marginTop: 4,
+  },
+  digitalColon: {
+    fontSize: 32,
+    fontWeight: '800',
+    color: COLORS.text,
+    marginBottom: 20,
+  },
+  presetsLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  presetsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 12,
+  },
+  presetPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  presetPillSelected: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  presetPillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.textSecondary,
+  },
+  presetPillTextSelected: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  timeHelpText: {
+    fontSize: 11,
+    color: COLORS.textMuted,
+    lineHeight: 16,
+    marginBottom: 14,
+    textAlign: 'center',
+  },
+  saveTimeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.primary,
+    paddingVertical: 12,
+    borderRadius: 14,
+  },
+  saveTimeBtnText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
