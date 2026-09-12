@@ -1,7 +1,7 @@
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { BackupData, TodoItem, NotificationSettings } from '../types/todo';
-import { loadTodos, loadSettings, saveTodos, saveSettings, getTodayString } from './storage';
+import { loadTodos, loadSettings, saveTodos, saveSettings, getTodayString, loadCategories, saveCategories } from './storage';
 
 /**
  * Generates a JSON backup file and opens the iOS Share Sheet
@@ -11,6 +11,7 @@ export const exportBackupToFile = async (): Promise<{ success: boolean; message:
   try {
     const todos = await loadTodos();
     const settings = await loadSettings();
+    const categories = await loadCategories();
     const today = getTodayString();
 
     const backupData: BackupData = {
@@ -19,6 +20,7 @@ export const exportBackupToFile = async (): Promise<{ success: boolean; message:
       exportedAt: new Date().toISOString(),
       todos,
       settings,
+      categories,
     };
 
     const jsonString = JSON.stringify(backupData, null, 2);
@@ -97,6 +99,10 @@ export const restoreFromBackupData = async (
 
     if (parsed.settings && typeof parsed.settings === 'object') {
       await saveSettings(parsed.settings as NotificationSettings);
+    }
+
+    if (Array.isArray(parsed.categories) && parsed.categories.length > 0) {
+      await saveCategories(parsed.categories);
     }
 
     return {

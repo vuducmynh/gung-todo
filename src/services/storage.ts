@@ -1,11 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { TodoItem, NotificationSettings } from '../types/todo';
-import { DEFAULT_SETTINGS } from '../constants/theme';
+import { TodoItem, NotificationSettings, Category } from '../types/todo';
+import { DEFAULT_SETTINGS, CATEGORIES } from '../constants/theme';
 
 const STORAGE_KEYS = {
   TODOS: '@gung_todos_v1',
   SETTINGS: '@gung_settings_v1',
   LAST_ACTIVE_DATE: '@gung_last_active_date_v1',
+  CATEGORIES: '@gung_categories_v1',
 };
 
 /**
@@ -127,4 +128,35 @@ export const checkAndPerformRollover = async (currentTodos: TodoItem[]): Promise
 
   await AsyncStorage.setItem(STORAGE_KEYS.LAST_ACTIVE_DATE, today);
   return { todos: updatedTodos, rolledOverCount };
+};
+
+/**
+ * Load categories from storage or initialize with default categories
+ */
+export const loadCategories = async (): Promise<Category[]> => {
+  try {
+    const raw = await AsyncStorage.getItem(STORAGE_KEYS.CATEGORIES);
+    if (!raw) return CATEGORIES;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return CATEGORIES;
+  } catch (error) {
+    console.error('Error loading categories:', error);
+    return CATEGORIES;
+  }
+};
+
+/**
+ * Save categories to storage
+ */
+export const saveCategories = async (categories: Category[]): Promise<boolean> => {
+  try {
+    await AsyncStorage.setItem(STORAGE_KEYS.CATEGORIES, JSON.stringify(categories));
+    return true;
+  } catch (error) {
+    console.error('Error saving categories:', error);
+    return false;
+  }
 };

@@ -12,6 +12,7 @@ import { Sparkles, Check, X, ArrowDownCircle, RefreshCw } from 'lucide-react-nat
 import { GitHubReleaseInfo } from '../types/todo';
 import { COLORS } from '../constants/theme';
 import { CatMascot } from './CatMascot';
+import { MarkdownView } from './MarkdownView';
 import { triggerHaptic } from '../utils/haptics';
 
 interface UpdateModalProps {
@@ -116,8 +117,7 @@ export const UpdateModal: React.FC<UpdateModalProps> = ({
           {updateState === 'idle' ? (
             <View style={styles.notesContainer}>
               <ScrollView showsVerticalScrollIndicator={true} style={styles.scrollArea}>
-                <Text style={styles.notesTitle}>Nội dung cập nhật:</Text>
-                <Text style={styles.notesText}>{releaseInfo.releaseNotes}</Text>
+                <MarkdownView content={releaseInfo.releaseNotes} />
               </ScrollView>
             </View>
           ) : (

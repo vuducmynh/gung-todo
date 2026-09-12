@@ -11,7 +11,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { X, Star, Check } from 'lucide-react-native';
-import { TodoItem, CategoryId } from '../types/todo';
+import { TodoItem, CategoryId, Category } from '../types/todo';
 import { CATEGORIES, COLORS } from '../constants/theme';
 import { triggerHaptic } from '../utils/haptics';
 
@@ -26,6 +26,7 @@ interface AddTodoModalProps {
   }) => void;
   editingItem?: TodoItem | null;
   targetDate: string;
+  categories?: Category[];
   hapticsEnabled?: boolean;
 }
 
@@ -35,11 +36,15 @@ export const AddTodoModal: React.FC<AddTodoModalProps> = ({
   onSave,
   editingItem,
   targetDate,
+  categories = CATEGORIES,
   hapticsEnabled = true,
 }) => {
+  const availableCategories = (categories || CATEGORIES).filter(c => c.id !== 'all');
+  const defaultCatId = availableCategories[0]?.id || 'work';
+
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
-  const [category, setCategory] = useState<CategoryId>('work');
+  const [category, setCategory] = useState<CategoryId>(defaultCatId);
   const [starred, setStarred] = useState(false);
 
   useEffect(() => {
@@ -51,10 +56,10 @@ export const AddTodoModal: React.FC<AddTodoModalProps> = ({
     } else {
       setTitle('');
       setNotes('');
-      setCategory('work');
+      setCategory(defaultCatId);
       setStarred(false);
     }
-  }, [editingItem, visible]);
+  }, [editingItem, visible, defaultCatId]);
 
   const handleSave = () => {
     if (!title.trim()) return;
@@ -68,8 +73,6 @@ export const AddTodoModal: React.FC<AddTodoModalProps> = ({
     });
     onClose();
   };
-
-  const availableCategories = CATEGORIES.filter(c => c.id !== 'all');
 
   return (
     <Modal

@@ -30,13 +30,15 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 
-import { TodoItem as TodoItemType, CategoryId, NotificationSettings, GitHubReleaseInfo, MascotMood } from './src/types/todo';
-import { COLORS, DEFAULT_SETTINGS, APP_CONFIG } from './src/constants/theme';
+import { TodoItem as TodoItemType, CategoryId, Category, NotificationSettings, GitHubReleaseInfo, MascotMood } from './src/types/todo';
+import { COLORS, DEFAULT_SETTINGS, APP_CONFIG, CATEGORIES } from './src/constants/theme';
 import {
   loadTodos,
   saveTodos,
   loadSettings,
   saveSettings,
+  loadCategories,
+  saveCategories,
   getTodayString,
   checkAndPerformRollover,
 } from './src/services/storage';
@@ -48,6 +50,7 @@ import {
 } from './src/services/notifications';
 import { checkForGitHubUpdate } from './src/services/updater';
 import { triggerHaptic } from './src/utils/haptics';
+import { playSound } from './src/utils/sound';
 
 import { CatMascot } from './src/components/CatMascot';
 import { TodoItem } from './src/components/TodoItem';
@@ -58,9 +61,11 @@ import { AddTodoModal } from './src/components/AddTodoModal';
 import { SettingsModal } from './src/components/SettingsModal';
 import { UpdateModal } from './src/components/UpdateModal';
 import { PermissionModal } from './src/components/PermissionModal';
+import { CategoryManagerModal } from './src/components/CategoryManagerModal';
 
 function MainScreen() {
   const [todos, setTodos] = useState<TodoItemType[]>([]);
+  const [categories, setCategories] = useState<Category[]>(CATEGORIES);
   const [settings, setSettings] = useState<NotificationSettings>(DEFAULT_SETTINGS);
   const [appVersion, setAppVersion] = useState<string>(APP_CONFIG.version);
   const [selectedDate, setSelectedDate] = useState<string>(getTodayString());
@@ -73,6 +78,7 @@ function MainScreen() {
   const [editingItem, setEditingItem] = useState<TodoItemType | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUpdateModalOpen, setIsUpdateModalOpen] = useState(false);
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false);
   const [releaseInfo, setReleaseInfo] = useState<GitHubReleaseInfo | null>(null);
   const [isPermissionModalOpen, setIsPermissionModalOpen] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
@@ -94,6 +100,10 @@ function MainScreen() {
         if (savedVersion && isMounted) {
           setAppVersion(savedVersion);
         }
+
+        // Load saved categories
+        const loadedCats = await loadCategories();
+        if (isMounted) setCategories(loadedCats);
 
         // Load saved settings
         const savedSettings = await loadSettings();
@@ -171,19 +181,15 @@ function MainScreen() {
   const categoryCounts = useMemo(() => {
     const counts: Record<CategoryId, number> = {
       all: dateTodos.length,
-      work: 0,
-      personal: 0,
-      shopping: 0,
-      health: 0,
-      other: 0,
     };
+    categories.forEach(c => {
+      counts[c.id] = 0;
+    });
     dateTodos.forEach(t => {
-      if (counts[t.category] !== undefined) {
-        counts[t.category]++;
-      }
+      counts[t.category] = (counts[t.category] || 0) + 1;
     });
     return counts;
-  }, [dateTodos]);
+  }, [dateTodos, categories]);
 
   // Displayed tasks after category & search filters
   const displayedTodos = useMemo(() => {
@@ -200,7 +206,7 @@ function MainScreen() {
       );
     }
 
-    // Sort: Incomplete first, Starred at the top, newest first
+    // Sort: Incomplete first, Starred at top (or explicit manual order), then order / createdAt
     return [...result].sort((a, b) => {
       if (a.completed !== b.completed) {
         return a.completed ? 1 : -1;
@@ -208,7 +214,9 @@ function MainScreen() {
       if (a.starred !== b.starred) {
         return a.starred ? -1 : 1;
       }
-      return b.createdAt - a.createdAt;
+      const orderA = a.order !== undefined ? a.order : a.createdAt;
+      const orderB = b.order !== undefined ? b.order : b.createdAt;
+      return orderA - orderB;
     });
   }, [dateTodos, selectedCategory, searchQuery]);
 
@@ -225,9 +233,11 @@ function MainScreen() {
 
   // Handlers
   const handleToggleComplete = async (id: string) => {
+    let nowCompleted = false;
     const updated = todos.map(t => {
       if (t.id === id) {
         const completed = !t.completed;
+        nowCompleted = completed;
         return {
           ...t,
           completed,
@@ -236,6 +246,13 @@ function MainScreen() {
       }
       return t;
     });
+
+    if (nowCompleted) {
+      playSound('complete', settings.soundFxEnabled);
+    } else {
+      playSound('pop', settings.soundFxEnabled);
+    }
+
     await updateAndSaveTodos(updated);
   };
 
@@ -256,6 +273,7 @@ function MainScreen() {
         text: 'Xóa',
         style: 'destructive',
         onPress: async () => {
+          playSound('pop', settings.soundFxEnabled);
           const updated = todos.filter(t => t.id !== id);
           await updateAndSaveTodos(updated);
         },
@@ -269,6 +287,7 @@ function MainScreen() {
     category: CategoryId;
     starred: boolean;
   }) => {
+    playSound('pop', settings.soundFxEnabled);
     if (editingItem) {
       // Edit existing
       const updated = todos.map(t => {
@@ -295,9 +314,75 @@ function MainScreen() {
         starred: data.starred,
         completed: false,
         date: selectedDate,
+        order: Date.now(),
         createdAt: Date.now(),
       };
       await updateAndSaveTodos([newTodo, ...todos]);
+    }
+  };
+
+  // Reordering logic
+  const handleMoveTodo = async (id: string, direction: 'up' | 'down' | 'top' | 'bottom') => {
+    const incompleteItems = displayedTodos.filter(t => !t.completed);
+    const index = incompleteItems.findIndex(t => t.id === id);
+    if (index === -1) return;
+
+    let targetIndex = index;
+    if (direction === 'up' && index > 0) targetIndex = index - 1;
+    else if (direction === 'down' && index < incompleteItems.length - 1) targetIndex = index + 1;
+    else if (direction === 'top') targetIndex = 0;
+    else if (direction === 'bottom') targetIndex = incompleteItems.length - 1;
+
+    if (targetIndex === index) return;
+
+    const reordered = [...incompleteItems];
+    const [movedItem] = reordered.splice(index, 1);
+    reordered.splice(targetIndex, 0, movedItem);
+
+    const orderMap = new Map<string, number>();
+    reordered.forEach((item, idx) => {
+      orderMap.set(item.id, idx);
+    });
+
+    const updated = todos.map(t => {
+      if (orderMap.has(t.id)) {
+        return { ...t, order: orderMap.get(t.id) };
+      }
+      return t;
+    });
+
+    await updateAndSaveTodos(updated);
+  };
+
+  // Category management handlers
+  const handleSaveCategory = async (cat: Category) => {
+    let updated: Category[];
+    const exists = categories.some(c => c.id === cat.id);
+    if (exists) {
+      updated = categories.map(c => (c.id === cat.id ? cat : c));
+    } else {
+      updated = [...categories, cat];
+    }
+    setCategories(updated);
+    await saveCategories(updated);
+  };
+
+  const handleDeleteCategory = async (catId: CategoryId) => {
+    const updatedCategories = categories.filter(c => c.id !== catId);
+    setCategories(updatedCategories);
+    await saveCategories(updatedCategories);
+
+    // Reassign any todos that had this category to 'other'
+    const updatedTodos = todos.map(t => {
+      if (t.category === catId) {
+        return { ...t, category: 'other' as CategoryId };
+      }
+      return t;
+    });
+    await updateAndSaveTodos(updatedTodos);
+
+    if (selectedCategory === catId) {
+      setSelectedCategory('all');
     }
   };
 
@@ -311,6 +396,8 @@ function MainScreen() {
     setTodos(reloaded);
     const reloadedSettings = await loadSettings();
     setSettings(reloadedSettings);
+    const reloadedCats = await loadCategories();
+    setCategories(reloadedCats);
   };
 
   const handleRequestPermission = async () => {
@@ -354,7 +441,6 @@ function MainScreen() {
                 <Text style={styles.versionPillText}>v{appVersion}</Text>
               </View>
             </View>
-            <Text style={styles.brandSubtitle}>Mèo cam nhắc việc đúng giờ 🐾</Text>
           </View>
         </View>
 
@@ -423,6 +509,8 @@ function MainScreen() {
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
         categoryCounts={categoryCounts}
+        categories={categories}
+        onOpenCategoryManager={() => setIsCategoryManagerOpen(true)}
         hapticsEnabled={settings.hapticsEnabled}
       />
 
@@ -430,19 +518,28 @@ function MainScreen() {
       <FlatList
         data={displayedTodos}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <TodoItem
-            item={item}
-            onToggleComplete={handleToggleComplete}
-            onToggleStar={handleToggleStar}
-            onEdit={itemToEdit => {
-              setEditingItem(itemToEdit);
-              setIsAddModalOpen(true);
-            }}
-            onDelete={handleDeleteTodo}
-            hapticsEnabled={settings.hapticsEnabled}
-          />
-        )}
+        renderItem={({ item }) => {
+          const incompleteItems = displayedTodos.filter(t => !t.completed);
+          const itemIndex = incompleteItems.findIndex(t => t.id === item.id);
+          return (
+            <TodoItem
+              item={item}
+              onToggleComplete={handleToggleComplete}
+              onToggleStar={handleToggleStar}
+              onEdit={itemToEdit => {
+                setEditingItem(itemToEdit);
+                setIsAddModalOpen(true);
+              }}
+              onDelete={handleDeleteTodo}
+              onMove={handleMoveTodo}
+              isFirst={itemIndex === 0}
+              isLast={itemIndex === incompleteItems.length - 1}
+              categories={categories}
+              hapticsEnabled={settings.hapticsEnabled}
+              soundFxEnabled={settings.soundFxEnabled}
+            />
+          );
+        }}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
         ListEmptyComponent={
@@ -483,6 +580,7 @@ function MainScreen() {
         onSave={handleSaveTodo}
         editingItem={editingItem}
         targetDate={selectedDate}
+        categories={categories}
         hapticsEnabled={settings.hapticsEnabled}
       />
 
@@ -494,11 +592,25 @@ function MainScreen() {
         todos={todos}
         onDataRestored={handleDataRestored}
         currentVersion={appVersion}
+        onOpenCategoryManager={() => {
+          setIsSettingsOpen(false);
+          setIsCategoryManagerOpen(true);
+        }}
         onShowUpdateInfo={info => {
           setIsSettingsOpen(false);
           setReleaseInfo(info);
           setIsUpdateModalOpen(true);
         }}
+      />
+
+      <CategoryManagerModal
+        visible={isCategoryManagerOpen}
+        onClose={() => setIsCategoryManagerOpen(false)}
+        categories={categories}
+        onSaveCategory={handleSaveCategory}
+        onDeleteCategory={handleDeleteCategory}
+        hapticsEnabled={settings.hapticsEnabled}
+        soundFxEnabled={settings.soundFxEnabled}
       />
 
       <UpdateModal

@@ -1,11 +1,12 @@
-export type CategoryId = 'all' | 'work' | 'personal' | 'shopping' | 'health' | 'other';
+export type CategoryId = string;
 
 export interface Category {
   id: CategoryId;
   name: string;
   color: string;
   bgColor: string;
-  icon: string;
+  icon?: string;
+  isCustom?: boolean;
 }
 
 export interface TodoItem {
@@ -16,6 +17,7 @@ export interface TodoItem {
   starred: boolean;
   category: CategoryId;
   date: string; // YYYY-MM-DD in local time
+  order?: number; // Manual sorting order
   createdAt: number;
   completedAt?: number;
   rolledOverFrom?: string; // YYYY-MM-DD of previous day if task was carried over
@@ -33,6 +35,7 @@ export interface NotificationSettings {
     minute: number;
   };
   soundEnabled: boolean;
+  soundFxEnabled: boolean;
   hapticsEnabled: boolean;
   permissionAsked: boolean;
   lastScheduledAt?: number;
@@ -44,6 +47,7 @@ export interface BackupData {
   exportedAt: string;
   todos: TodoItem[];
   settings: NotificationSettings;
+  categories?: Category[];
 }
 
 export interface GitHubReleaseInfo {

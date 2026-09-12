@@ -9,10 +9,16 @@ import {
   ChevronUp,
   Clock,
   FileText,
+  GripVertical,
+  ArrowUp,
+  ArrowDown,
+  ChevronsUp,
+  ChevronsDown,
 } from 'lucide-react-native';
-import { TodoItem as TodoItemType } from '../types/todo';
+import { TodoItem as TodoItemType, Category } from '../types/todo';
 import { CATEGORIES, COLORS } from '../constants/theme';
 import { triggerHaptic } from '../utils/haptics';
+import { playSound } from '../utils/sound';
 
 interface TodoItemProps {
   item: TodoItemType;
@@ -20,7 +26,12 @@ interface TodoItemProps {
   onToggleStar: (id: string) => void;
   onEdit: (item: TodoItemType) => void;
   onDelete: (id: string) => void;
+  onMove?: (id: string, direction: 'up' | 'down' | 'top' | 'bottom') => void;
+  isFirst?: boolean;
+  isLast?: boolean;
+  categories?: Category[];
   hapticsEnabled?: boolean;
+  soundFxEnabled?: boolean;
 }
 
 export const TodoItem: React.FC<TodoItemProps> = ({
@@ -29,11 +40,18 @@ export const TodoItem: React.FC<TodoItemProps> = ({
   onToggleStar,
   onEdit,
   onDelete,
+  onMove,
+  isFirst = false,
+  isLast = false,
+  categories,
   hapticsEnabled = true,
+  soundFxEnabled = true,
 }) => {
   const [expanded, setExpanded] = useState(false);
+  const [showReorder, setShowReorder] = useState(false);
 
-  const category = CATEGORIES.find(c => c.id === item.category) || CATEGORIES[1];
+  const categoryList = categories && categories.length > 0 ? categories : CATEGORIES;
+  const category = categoryList.find(c => c.id === item.category) || categoryList[1] || CATEGORIES[1];
 
   const handleToggleCheck = () => {
     triggerHaptic(item.completed ? 'light' : 'success', hapticsEnabled);
@@ -56,11 +74,19 @@ export const TodoItem: React.FC<TodoItemProps> = ({
   };
 
   return (
-    <View
+    <TouchableOpacity
+      activeOpacity={0.95}
+      onLongPress={() => {
+        if (!item.completed && onMove) {
+          triggerHaptic('medium', hapticsEnabled);
+          setShowReorder(!showReorder);
+        }
+      }}
       style={[
         styles.card,
         item.completed && styles.cardCompleted,
         item.starred && !item.completed && styles.cardStarred,
+        showReorder && styles.cardReordering,
       ]}
     >
       <View style={styles.mainRow}>
@@ -132,7 +158,98 @@ export const TodoItem: React.FC<TodoItemProps> = ({
             fill={item.starred ? COLORS.star : 'transparent'}
           />
         </TouchableOpacity>
+
+        {/* Drag / Reorder Handle (Only for incomplete tasks) */}
+        {!item.completed && onMove && (
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection', hapticsEnabled);
+              setShowReorder(!showReorder);
+            }}
+            style={styles.gripBtn}
+            activeOpacity={0.6}
+          >
+            <GripVertical
+              size={18}
+              color={showReorder ? COLORS.primary : COLORS.textMuted}
+            />
+          </TouchableOpacity>
+        )}
       </View>
+
+      {/* Reorder Action Bar */}
+      {showReorder && !item.completed && onMove && (
+        <View style={styles.reorderBar}>
+          <Text style={styles.reorderTitle}>Vị trí:</Text>
+
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection', hapticsEnabled);
+              playSound('pop', soundFxEnabled);
+              onMove(item.id, 'top');
+            }}
+            disabled={isFirst}
+            style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}
+          >
+            <ChevronsUp size={14} color={isFirst ? COLORS.border : COLORS.primary} />
+            <Text style={[styles.reorderBtnText, isFirst && styles.reorderBtnTextDisabled]}>
+              Đầu
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection', hapticsEnabled);
+              playSound('pop', soundFxEnabled);
+              onMove(item.id, 'up');
+            }}
+            disabled={isFirst}
+            style={[styles.reorderBtn, isFirst && styles.reorderBtnDisabled]}
+          >
+            <ArrowUp size={14} color={isFirst ? COLORS.border : COLORS.primary} />
+            <Text style={[styles.reorderBtnText, isFirst && styles.reorderBtnTextDisabled]}>
+              Lên
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection', hapticsEnabled);
+              playSound('pop', soundFxEnabled);
+              onMove(item.id, 'down');
+            }}
+            disabled={isLast}
+            style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}
+          >
+            <ArrowDown size={14} color={isLast ? COLORS.border : COLORS.primary} />
+            <Text style={[styles.reorderBtnText, isLast && styles.reorderBtnTextDisabled]}>
+              Xuống
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => {
+              triggerHaptic('selection', hapticsEnabled);
+              playSound('pop', soundFxEnabled);
+              onMove(item.id, 'bottom');
+            }}
+            disabled={isLast}
+            style={[styles.reorderBtn, isLast && styles.reorderBtnDisabled]}
+          >
+            <ChevronsDown size={14} color={isLast ? COLORS.border : COLORS.primary} />
+            <Text style={[styles.reorderBtnText, isLast && styles.reorderBtnTextDisabled]}>
+              Cuối
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={() => setShowReorder(false)}
+            style={styles.reorderCloseBtn}
+          >
+            <Check size={14} color="#FFFFFF" strokeWidth={2.8} />
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Expanded Note Section */}
       {expanded && item.notes && item.notes.trim().length > 0 && (
@@ -159,7 +276,7 @@ export const TodoItem: React.FC<TodoItemProps> = ({
           </TouchableOpacity>
         </View>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 };
 
@@ -317,5 +434,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
     color: COLORS.textSecondary,
+  },
+  cardReordering: {
+    borderColor: COLORS.primary,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  gripBtn: {
+    padding: 6,
+    marginLeft: 2,
+  },
+  reorderBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginTop: 10,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  reorderTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.textMuted,
+    marginRight: 2,
+    textTransform: 'uppercase',
+  },
+  reorderBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  reorderBtnDisabled: {
+    opacity: 0.4,
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+  },
+  reorderBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.primary,
+  },
+  reorderBtnTextDisabled: {
+    color: COLORS.border,
+  },
+  reorderCloseBtn: {
+    marginLeft: 'auto',
+    backgroundColor: COLORS.success,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

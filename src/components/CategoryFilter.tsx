@@ -1,6 +1,7 @@
 import React from 'react';
 import { ScrollView, TouchableOpacity, Text, StyleSheet, View } from 'react-native';
-import { CategoryId } from '../types/todo';
+import { Tag, Plus } from 'lucide-react-native';
+import { Category, CategoryId } from '../types/todo';
 import { CATEGORIES, COLORS } from '../constants/theme';
 import { triggerHaptic } from '../utils/haptics';
 
@@ -8,6 +9,8 @@ interface CategoryFilterProps {
   selectedCategory: CategoryId;
   onSelectCategory: (id: CategoryId) => void;
   categoryCounts: Record<CategoryId, number>;
+  categories?: Category[];
+  onOpenCategoryManager?: () => void;
   hapticsEnabled?: boolean;
 }
 
@@ -15,6 +18,8 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
   selectedCategory,
   onSelectCategory,
   categoryCounts,
+  categories = CATEGORIES,
+  onOpenCategoryManager,
   hapticsEnabled = true,
 }) => {
   return (
@@ -24,7 +29,7 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.container}
       >
-        {CATEGORIES.map(category => {
+        {categories.map(category => {
           const isSelected = selectedCategory === category.id;
           const count = categoryCounts[category.id] || 0;
 
@@ -71,6 +76,21 @@ export const CategoryFilter: React.FC<CategoryFilterProps> = ({
             </TouchableOpacity>
           );
         })}
+
+        {/* Manage Categories Button */}
+        {onOpenCategoryManager && (
+          <TouchableOpacity
+            activeOpacity={0.7}
+            onPress={() => {
+              triggerHaptic('selection', hapticsEnabled);
+              onOpenCategoryManager();
+            }}
+            style={styles.managePill}
+          >
+            <Tag size={13} color={COLORS.primary} />
+            <Text style={styles.managePillText}>Nhãn</Text>
+          </TouchableOpacity>
+        )}
       </ScrollView>
     </View>
   );
@@ -130,5 +150,22 @@ const styles = StyleSheet.create({
   },
   badgeTextInactive: {
     color: COLORS.textMuted,
+  },
+  managePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    gap: 5,
+  },
+  managePillText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.primary,
   },
 });

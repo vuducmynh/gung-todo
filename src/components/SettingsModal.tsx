@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   ExternalLink,
   CheckCircle2,
+  Tag,
 } from 'lucide-react-native';
 import { NotificationSettings, GitHubReleaseInfo, TodoItem } from '../types/todo';
 import { COLORS, APP_CONFIG } from '../constants/theme';
@@ -40,6 +41,7 @@ interface SettingsModalProps {
   todos: TodoItem[];
   onDataRestored: () => void;
   onShowUpdateInfo: (info: GitHubReleaseInfo) => void;
+  onOpenCategoryManager?: () => void;
   currentVersion?: string;
 }
 
@@ -51,6 +53,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   todos,
   onDataRestored,
   onShowUpdateInfo,
+  onOpenCategoryManager,
   currentVersion,
 }) => {
   const activeVersion = currentVersion || APP_CONFIG.version;
@@ -238,6 +241,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Text style={styles.sectionTitle}>Tương tác & Phản hồi</Text>
               </View>
 
+              {/* Haptics */}
               <View style={styles.settingRow}>
                 <View style={styles.settingTextCol}>
                   <Text style={styles.settingLabel}>Rung Haptic (Taptic Engine)</Text>
@@ -249,9 +253,50 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   trackColor={{ false: COLORS.border, true: COLORS.primary }}
                 />
               </View>
+
+              {/* Sound FX */}
+              <View style={styles.settingRow}>
+                <View style={styles.settingTextCol}>
+                  <Text style={styles.settingLabel}>Âm thanh thao tác (Sound FX)</Text>
+                  <Text style={styles.settingSub}>Tiếng chuông hoàn thành và tiếng pop chân thực</Text>
+                </View>
+                <Switch
+                  value={settings.soundFxEnabled}
+                  onValueChange={() => toggleSetting('soundFxEnabled')}
+                  trackColor={{ false: COLORS.border, true: COLORS.primary }}
+                />
+              </View>
             </View>
 
-            {/* 3. SAO LƯU & PHỤC HỒI DỮ LIỆU */}
+            {/* 3. QUẢN LÝ NHÃN & DANH MỤC */}
+            {onOpenCategoryManager && (
+              <View style={styles.section}>
+                <View style={styles.sectionHeader}>
+                  <Tag size={18} color={COLORS.primary} />
+                  <Text style={styles.sectionTitle}>Nhãn & Danh mục công việc</Text>
+                </View>
+                <Text style={styles.sectionDesc}>
+                  Tùy chỉnh thêm nhãn mới, chọn màu pastel, sửa tên hoặc xóa nhãn cá nhân.
+                </Text>
+
+                <TouchableOpacity
+                  onPress={() => {
+                    triggerHaptic('selection', settings.hapticsEnabled);
+                    onOpenCategoryManager();
+                  }}
+                  style={styles.actionItem}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.actionItemLeft}>
+                    <Tag size={16} color={COLORS.primary} />
+                    <Text style={styles.actionItemText}>Mở bảng Quản lý Nhãn & Màu sắc 🏷️</Text>
+                  </View>
+                  <ExternalLink size={14} color={COLORS.textMuted} />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* 4. SAO LƯU & PHỤC HỒI DỮ LIỆU */}
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
                 <ShieldCheck size={18} color={COLORS.primary} />
